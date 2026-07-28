@@ -1,7 +1,7 @@
 {
-  "name": "compound-engineering",
-  "version": "3.20.0",
-  "description": "Brainstorm, plan, debug, review, and compound learnings with AI agents",
+  "name": "compound-engineering-sol-fable",
+  "version": "3.20.0-sol-fable.1+codex.20260728153746",
+  "description": "Compound Engineering 3.20.0 with GPT-5.6 Sol/high and Claude Fable/max cross-model review",
   "author": {
     "name": "Kieran Klaassen and Trevin Chow"
   },
@@ -19,10 +19,10 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Compound Engineering",
-    "shortDescription": "Brainstorm, plan, debug, review, and compound learnings with AI agents",
-    "longDescription": "Compound Engineering guides AI agents through the full engineering loop: strategy, ideation, requirements, planning, execution, debugging, review, PR feedback, and captured learnings that make future work easier.",
-    "developerName": "Kieran Klaassen and Trevin Chow",
+    "displayName": "Compound Engineering \u2014 Sol/Fable",
+    "shortDescription": "Compound Engineering with pinned Sol/high and Fable/max peer review",
+    "longDescription": "A local Compound Engineering 3.20.0 fork that pins cross-model review to GPT-5.6 Sol at high reasoning from Claude hosts and Claude Fable at max effort from Codex hosts.",
+    "developerName": "Local fork of Kieran Klaassen and Trevin Chow",
     "category": "Coding",
     "capabilities": [
       "Interactive",

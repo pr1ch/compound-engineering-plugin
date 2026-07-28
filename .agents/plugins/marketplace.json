@@ -1,11 +1,11 @@
 {
-  "name": "compound-engineering-plugin",
+  "name": "compound-engineering-sol-fable",
   "interface": {
-    "displayName": "Compound Engineering"
+    "displayName": "Compound Engineering — Sol/Fable"
   },
   "plugins": [
     {
-      "name": "compound-engineering",
+      "name": "compound-engineering-sol-fable",
       "source": {
         "source": "local",
         "path": "./"

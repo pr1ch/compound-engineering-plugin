@@ -8,9 +8,9 @@
 # scope; private prompt/result scratch stays outside that repository.
 #
 # Independence is by PROVIDER, not CLI brand. A provider is reached by a ROUTE:
-# its dedicated CLI, or (for the fixed grok-cursor / composer routes) cursor-agent. All
-# peer runs on ONE model at HIGH reasoning (composer's
-# -fast tier is its ceiling, an accepted exception).
+# its dedicated CLI, or (for the fixed grok-cursor / composer routes) cursor-agent.
+# Peer runs use the per-provider model/effort mapping below; composer's -fast
+# tier is its ceiling.
 #
 # Usage:
 #   cross-model-pov.sh <host-provider> <fixed-route> <subject-payload> <run-dir>
@@ -78,10 +78,10 @@ log()  { printf '[cross-model-pov] %s\n' "$*" >&2; }
 skip() { log "$*"; exit 0; }   # non-blocking: announce reason, exit clean, no output
 
 # --- model + reasoning per provider ----------------------------------------
-# ONE model at HIGH reasoning per provider. Concrete IDs are the CURRENT instance of the tier principle
-# and the single maintenance point when model families change.
+# ONE editorial model/reasoning mapping per provider. Concrete IDs are the CURRENT
+# instance of the tier principle and the single maintenance point when families change.
 M_CODEX="gpt-5.6-sol"          # codex CLI            (-c model_reasoning_effort="high")
-M_CLAUDE="opus"                # claude CLI, Opus 4.8 (--effort high)
+M_CLAUDE="fable"               # claude CLI           (--effort max)
 M_GROK="grok-4.5"              # grok CLI             (--effort high)
 M_GROK_CURSOR="cursor-grok-4.5-high" # cursor-agent grok route (reasoning baked into id)
 M_COMPOSER="composer-2.5-fast" # cursor-agent composer (no high tier; -fast is the ceiling)
@@ -97,6 +97,7 @@ M_COMPOSER="composer-2.5-fast" # cursor-agent composer (no high tier; -fast is t
 expected_model_prefix() {   # <requested-alias> -> expected served-id prefix
   case "$1" in
     opus)   printf 'claude-opus-' ;;
+    fable)  printf 'claude-fable-' ;;
     sonnet) printf 'claude-sonnet-' ;;
     haiku)  printf 'claude-haiku-' ;;
   esac
@@ -179,7 +180,8 @@ extract_model_receipt() {   # <route>; reads the envelope in $PEERLOG, sets MODE
 # --- adapter argv (single source of truth for route flags) -----------------
 # Emits the CLI + flags one token per line. Read-only, no-prompt, least-privilege
 # (web-only on claude/grok; read-only residual on codex/cursor-agent), and
-# high-reasoning. PEER_WORKDIR / RAW_OUT / PROMPT_FILE / SCHEMA_REF are
+# Codex high + Claude max, with other routes at their mapped tiers.
+# PEER_WORKDIR / RAW_OUT / PROMPT_FILE / SCHEMA_REF are
 # resolved by the caller (placeholders in --emit-adapter mode); PEER_WORKDIR is the
 # per-peer empty cwd/workspace, kept separate from the shared fold-in dir RUN_DIR.
 # Peer routes write to RAW_OUT only; the final fold-in file (OUT) is published after normalize so an orphaned
@@ -196,7 +198,7 @@ adapter_argv() {
       # Keep project auto-discovery disabled while allowing only repository reads
       # and bounded public web checks. Mutating tools, Bash, MCP, and subagents are
       # absent from the allowlist.
-      printf '%s\0' claude -p --model "$(route_model claude)" --effort high --permission-mode dontAsk \
+      printf '%s\0' claude -p --model "$(route_model claude)" --effort max --permission-mode dontAsk \
         --safe-mode --disable-slash-commands --tools Read,Glob,Grep,WebSearch,WebFetch \
         --max-turns 15 --no-session-persistence --json-schema "$SCHEMA_REF" --output-format json
       ;;
@@ -233,7 +235,7 @@ apply_model_override() {
   [ "$target" != "cursor" ] || return 1
   case "$route:$override" in
     codex:gpt-*|codex:o[0-9]* ) ;;
-    claude:opus|claude:sonnet|claude:haiku|claude:claude-* ) ;;
+    claude:fable|claude:opus|claude:sonnet|claude:haiku|claude:claude-* ) ;;
     grok-cli:grok-* ) ;;
     grok-cursor:cursor-grok-* ) ;;
     composer:composer-* ) ;;
@@ -618,7 +620,7 @@ attempt_route() {   # <provider> <route>
   build_cmd "$route"
   case "$route" in
     codex)       note="$(route_model codex) (effort high)" ;;
-    claude)      note="$(route_model claude) (effort high)" ;;
+    claude)      note="$(route_model claude) (effort max)" ;;
     grok-cli)    note="$(route_model grok-cli) (effort high)" ;;
     grok-cursor) note="$(route_model grok-cursor)" ;;
     cursor)      note="auto (serving model unverified)" ;;
