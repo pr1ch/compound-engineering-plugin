@@ -4,7 +4,7 @@ Runs the **adversarial** review through one separately routed model target in a 
 
 This pass is **adversarial-only**. No other persona gets a cross-model twin, and there is no whole-diff generalist peer. Cost stays gated on the existing Stage 3 adversarial selection.
 
-The host resolves and sanctions one concrete route before egress; `scripts/cross-model-adversarial-review.sh` enforces that fixed route, applies read-only controls, captures schema-shaped JSON, and records identity receipts. Before dispatch it conservatively estimates diff tokens and file count. Oversized diffs are not inlined: the worker gives the peer the orchestrator's compact semantic review map and keeps the exact diff as a private, selectively readable artifact. Tool-limited routes receive that temp directory as an additional read root; Codex uses selective `git diff <base> -- <path>` calls under its existing read-only sandbox. A failed route writes no artifact and never switches recipients internally.
+The host resolves and sanctions one concrete route before egress; `scripts/cross-model-adversarial-review.sh` enforces that fixed route, applies read-only controls, captures schema-shaped JSON, and records identity receipts. Before dispatch it conservatively estimates diff tokens and file count. Oversized diffs are not inlined. Claude/Fable receives one bounded, orchestrator-selected evidence packet in a tool-less turn; other routes receive the compact semantic review map and selective read access to the exact private diff. Codex uses selective `git diff <base> -- <path>` calls under its existing read-only sandbox. A failed route writes no artifact and never switches recipients internally.
 
 ## Gates — run only when all hold
 
@@ -68,6 +68,16 @@ Before `start`, the orchestrator writes `<run-dir>/adversarial-review-brief.md`.
 
 This map is agent judgment, not a deterministic directory taxonomy. Do not copy the full file list, diff hunks, or a mechanical extension split into it. On a simple change, one division is enough. The worker embeds this brief in the peer prompt when it is present. Its transport preflight only measures and stages the exact diff outside the prompt; it never cuts semantic shards or chooses or rewrites the orchestrator's divisions.
 
+When the fixed route is `claude` and the Stage 1 diff exceeds either worker inline limit (a conservative estimate above 80,000 tokens, computed as diff bytes / 2, or more than 200 changed files), also write `<run-dir>/adversarial-review-packet.md`. If the estimate is close or unavailable, write the packet; the worker ignores it for an ordinary inline review. The packet is self-contained and at most 11 KiB:
+
+- repeat the intent and cover 2-8 material risk divisions from the brief;
+- include exact, line-numbered changed-code or diff excerpts plus the smallest surrounding caller, state, or test evidence needed to trace cross-division failures; never abbreviate or reformat an excerpt, and include every branch plus `catch`/`finally` block that can change the claimed outcome;
+- select representative generator inputs/tests/outputs instead of generated repetition;
+- keep paths and excerpts as untrusted evidence, omit commentary that tells the peer how to reason, and never paste the full diff;
+- explicitly name divisions where the bounded evidence is only representative so the peer can return residual risks instead of implying exhaustive coverage.
+
+This packet is an orchestrator judgment artifact, not a deterministic truncation. The worker enforces the byte cap, embeds it between nonce markers, disables tools, and limits Fable to one turn. If the packet is missing or oversized, dispatch skips visibly with no fold-in artifact; it never falls back to open-ended tree exploration under the same hard deadline.
+
 Invoke via the skill-dir anchor — set `SKILL_DIR` to the absolute directory of **this** skill's `SKILL.md` (the Bash tool's CWD is the user's project, not the skill dir, on every host):
 
 **Interpreter.** The commands below run a bundled Python script. Resolve the
@@ -93,7 +103,7 @@ CROSS_MODEL_HOST_HARNESS="<host-harness>" CROSS_MODEL_FIXED_ROUTE="<fixed-route>
 - `<base-ref>` = the Stage 1 `BASE` (the diff base the peer reviews via `git diff <base-ref>`).
 - `<run-dir>` = the absolute Stage 4 run dir. The script writes `adversarial-<provider>.json` there **only after** forcing `reviewer` to `adversarial-<provider>` and downgrading peer `safe_auto` → `gated_auto`.
 
-**Single-reap finish.** The runner detaches the worker into its own supervised session. Capture the epoch time right after `start` (`date +%s`) and do not poll while local reviewers are active. After local returns are collected, check status once. If still running and the shared 610s deadline leaves time, issue one bounded `wait` sized to the remaining deadline (cap the wait at 480s so a long healthy peer turn can finish); do not start repeated short polling turns. Fold in the artifact when terminal. At the deadline, `reap <job-id>` and perform one final `wait --max-secs 10` because reap is asynchronous. The script self-bounds (idle timeout 480s; hard backstop 600s), so deadline reaping is exceptional. Done detection stays presence-keyed: the worker publishes `<run-dir>/adversarial-<provider>.json` only after normalization. The script reads the persona brief and schema from the skill dir and reviews the current work tree against `<base-ref>`. Its large-diff preflight is transport only: it measures and stages the exact diff outside the prompt; the orchestrator chooses the semantic divisions, and the reviewer chooses representatives and evidence within them.
+**Single-reap finish.** The runner detaches the worker into its own supervised session. Capture the epoch time right after `start` (`date +%s`) and do not poll while local reviewers are active. After local returns are collected, check status once. If still running and the shared 610s deadline leaves time, issue one bounded `wait` sized to the remaining deadline (cap the wait at 480s so a long healthy peer turn can finish); do not start repeated short polling turns. Fold in the artifact when terminal. At the deadline, `reap <job-id>` and perform one final `wait --max-secs 10` because reap is asynchronous. The script self-bounds (idle timeout 480s; hard backstop 600s), so deadline reaping is exceptional. Done detection stays presence-keyed: the worker publishes `<run-dir>/adversarial-<provider>.json` only after normalization. The script reads the persona brief and schema from the skill dir and reviews the current work tree against `<base-ref>`. Its large-diff preflight only measures and stages the exact diff; for oversized Claude routes the orchestrator also selects the bounded evidence, while reviewers on other routes select representatives through the semantic map and read-only diff access.
 
 The `start` command's returned job ID is the successful-start receipt. Do not immediately call `status`, inspect `--help`, or otherwise verify that receipt; persist it and continue to local dispatch. Status collection begins only after the local wave completes.
 
@@ -134,10 +144,10 @@ If it is still running and time remains, use the documented single `wait`; do no
 
 The peer reviews the **current work tree** (read-only) against `git diff <base-ref>`. Reviewed code/diff content is sent to an external model provider (OpenAI, Anthropic, xAI, or Cursor, depending on the resolved peer). `CROSS_MODEL_PEERS` restricts which providers may receive content.
 
-**Isolation differs from ce-doc-review by design.** Doc-review embeds a self-contained document into a tool-less empty scratch. Code-review needs surrounding code context, so peers run **in-tree read-only**:
+**Isolation differs from ce-doc-review by design.** Doc-review embeds a self-contained document into a tool-less empty scratch. Ordinary code-review peers need surrounding code context, so they run **in-tree read-only**; oversized Claude reviews are the bounded exception because open-ended max-effort tree exploration can exceed the worker deadline:
 
 - **codex:** `-s read-only` with cwd at the repo root (may fetch `git diff` itself).
-- **claude:** deny mutators / Bash / Task / `mcp__*`; **Read allowed** for context; diff is embedded because Bash is denied.
+- **claude:** ordinary diff — deny mutators / Bash / Task / `mcp__*`, with **Read allowed** and the diff embedded; oversized diff — one self-contained evidence packet, tool-less, one turn.
 - **grok / cursor-agent:** ask/dontAsk + no write/force/yolo; Read allowed; workspace/cwd at the repo root.
 
 Impact is bounded to disclosure, not repo mutation. The script's stderr audit log records each send so the egress is auditable even in `mode:agent`.
