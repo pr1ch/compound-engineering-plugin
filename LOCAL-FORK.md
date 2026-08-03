@@ -1,7 +1,7 @@
 # Compound Engineering — Sol/Fable local fork
 
-Upstream base: Compound Engineering 3.20.0 at commit
-`a9f6d530d4446d805a3100387dedd86268d7e695`.
+Upstream base: Compound Engineering 3.21.0 at commit
+`4a47a2e0ae06aec412b8b242f3fc4d7ace9bf7da`.
 
 Local cross-model review policy:
 
@@ -13,5 +13,9 @@ Local cross-model review policy:
 - The Claude model receipt matcher recognizes the `claude-fable-*` served-model
   family so the review artifact can distinguish a verified Fable receipt from a
   backend substitution.
+- The upstream 3.21 streaming transport, idle guard, derived supervisor window,
+  and repeated wait slices remain intact; this fork changes model policy rather
+  than maintaining a parallel timeout implementation.
 
-Keep the two cross-model shell kernels in parity when changing the mapping.
+Keep the code-review, doc-review, and POV route mappings aligned when changing
+the policy. Code-review and doc-review kernel parity is enforced in tests.

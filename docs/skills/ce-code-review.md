@@ -105,7 +105,7 @@ Synthesis owns the final route. Persona-provided routing metadata is input, not 
 | Mode | When | Behavior |
 |------|------|----------|
 | **Default markdown** | Direct user invocation | Report-only markdown with stable findings and an actionable summary |
-| **`mode:agent`** | `mode:agent` (alias `mode:headless`) | One JSON object; report-only — the review mutates nothing and the caller (e.g. `/ce-work`) applies findings and owns the Residual Work Gate |
+| **`mode:agent`** | `mode:agent` (alias `mode:headless`) | One JSON object; report-only — the review mutates nothing and the caller (e.g. `/ce-work`) applies findings and owns the Residual Work Gate. `mode:non-interactive` is **not** this alias (fail closed if passed). |
 | **Explicit local apply** | Add `apply:local`, or explicitly ask the invoked review to apply/fix its findings | Keeps markdown presentation; Stage 5c may apply verified fixes and commit them when the pre-review tree was clean. Never pushes |
 
 The skill never switches branches: a PR/branch argument selects review *scope* (diffed without checkout), not permission to mutate. Explicit local apply edits the current checkout in place; to review the current checkout against another ref, pass `base:<ref>`.
@@ -216,7 +216,7 @@ Concurrent use note: bare and `mode:agent` reviews are report-only and safe alon
 | `<branch name>` | Reviews that branch without checking it out (remote/local ref diff) |
 | `base:<sha-or-ref>` | Skips scope detection; reviews current checkout against that ref |
 | `plan:<path>` | Loads the plan for requirements verification |
-| `mode:agent` | JSON machine handoff; report-only (the caller applies). `mode:headless` is a deprecated alias; `mode:report-only` is ignored |
+| `mode:agent` | JSON machine handoff; report-only (the caller applies). `mode:headless` is a deprecated alias; `mode:non-interactive` is **not** an alias here (stop if passed); `mode:report-only` is ignored |
 | `apply:local` | Explicitly authorize verified local fixes; conflicts with `mode:agent` |
 | `grouping:auto` / `grouping:off` / `grouping:always` | Thematic triage grouping of findings (default `auto`: group when findings span distinct concerns). Presentation only — never changes reviewer selection, merge logic, or apply behavior |
 
@@ -233,13 +233,13 @@ Use it when it's the right tool — the quick-review short-circuit defers to it 
 Agent judgment over the actual diff — not keyword matching. Correctness and project-standards run for every multi-agent review. Generic, cross-cutting, and stack-specific personas are added only when their concern is present (e.g., testing when tests/harnesses changed or when meaningful runtime behavior changed without corresponding test work, security for auth, `data-migration-reviewer` for migration artifacts). Production-file presence alone and non-behavioral edits do not select testing. A silent-pass verification mechanism (CI/CD gate, build/deploy step, coverage/lint gate, test harness/mock) gets adversarial + the cross-model pass regardless of size.
 
 **What's the difference between default, `mode:agent`, and `apply:local`?**
-Default is a human-facing markdown report and is report-only. `mode:agent` is the same review pipeline serialized as one JSON object for a caller; it is always report-only. `apply:local` is separate authority for the markdown run to apply verified findings locally. `mode:headless` is a deprecated alias for `mode:agent`.
+Default is a human-facing markdown report and is report-only. `mode:agent` is the same review pipeline serialized as one JSON object for a caller; it is always report-only. `apply:local` is separate authority for the markdown run to apply verified findings locally. `mode:headless` is a deprecated alias for `mode:agent`. `mode:non-interactive` means “suppress prompts” in other CE skills and is **not** valid here — pass `mode:agent` for JSON.
 
 **What's the Residual Work Gate?**
 A caller-owned step (not part of the review skill): in `mode:agent`, the caller (typically `/ce-work`) applies what it can, then presents the findings it didn't apply and asks the user: apply now, file tickets, accept with durable sink, or stop. "Accept" requires a real durable record (Known Residuals in PR description, or `docs/residual-review-findings/<sha>.md`) — findings can't disappear into chat.
 
 **What's the difference between this and `ce-doc-review`'s cross-model pass?**
-Same independence *system* (host attestation, multi-provider selection, read-only peer CLI run as a detached job polled in bounded slices, requested-vs-served model receipts, fold-in as `<lens>-<provider>`, agreement promotion). Different *lens policy*: code-review runs **adversarial only**; doc-review runs a judgment trio plus a whole-doc sweep because document judgment is spread across more lenses. Ordinary code-review peers inspect the work tree/diff in-place. An oversized Claude/Fable review instead receives a bounded representative evidence packet in one tool-less turn so it can finish inside the worker deadline; coverage that packet cannot prove remains explicit residual risk. Doc-review embeds the document into a more isolated scratch.
+Same independence *system* (host attestation, multi-provider selection, read-only peer CLI run as a detached job polled in bounded slices, requested-vs-served model receipts, fold-in as `<lens>-<provider>`, agreement promotion). Different *lens policy*: code-review runs **adversarial only**; doc-review runs a judgment trio plus a whole-doc sweep because document judgment is spread across more lenses. Code-review peers review the work tree/diff in-place; doc-review embeds the document into a more isolated scratch.
 
 **Why does it never switch the checkout?**
 The skill never runs `git checkout`/`switch` — passing a PR/branch selects review *scope*, not permission to mutate the tree (it diffs remote/local refs without checking out). Explicit local apply may edit the current checkout, but it never switches branches. To review the current checkout against a different ref, pass `base:<ref>`.

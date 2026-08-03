@@ -2,7 +2,7 @@
 
 The single source of truth for how any finding is rendered for a human decision — across **every**
 presentation surface: the interactive walkthrough terminal block (`references/walkthrough.md`), the
-batch report table (`references/review-output-template.md`), the headless envelope
+batch report table (`references/review-output-template.md`), the non-interactive envelope
 (`references/synthesis-and-presentation.md` Phase 4), the bulk-action preview line
 (`references/bulk-preview.md`), and the Open Questions entry a Defer persists into the document
 (`references/open-questions-defer.md`). Each surface keeps its own layout and maps that layout onto the
@@ -16,12 +16,18 @@ or the reviewed product's codebase. The output exists so they can decide **Apply
 without reconstructing the finding from expert narrative. A finding whose only path to a decision is
 "go read the code" has failed this floor regardless of how correct it is.
 
+Write human-facing finding prose in an ASD-STE100 Simplified Technical English (STE)-inspired style.
+Use short, direct sentences. Keep one consequence, recommendation, or supporting idea per sentence,
+and use one consistent term for each concept. Preserve exact document identifiers and domain terms
+when they help the decision. Shorten sentences, not content: preserve coverage, evidence, technical
+depth, and every distinct consequence, qualification, or required action.
+
 ## Decision-first field order
 
 Every actionable finding carries these fields, and each surface makes them decision-first in its own
 idiom rather than reproducing the exact label sequence. The invariant both share: the **consequence is
 legible up front with no opaque token**, and the **recommendation is unmistakably marked**. Concretely:
-the **headless envelope** prints them as explicit labeled lines; the **walkthrough block** leads with a
+the **non-interactive envelope** prints them as explicit labeled lines; the **walkthrough block** leads with a
 consequence-phrased title, then What's-wrong / Proposed-fix / If-left-as-is, and marks the recommendation
 on its question options; the **batch table** leads its Issue cell with the consequence and carries the
 recommendation in its Tier/action column; the **bulk-preview line** leads with the consequence and
@@ -31,9 +37,11 @@ verbatim.
 
 1. **Recommendation** — the recommended action (`Apply` / `Defer` / `Skip`, from the finding's
    `recommended_action`), stated up front. This is what the user is being asked to accept or reject.
-2. **Consequence if unchanged** — one sentence: what goes wrong, for whom, if the finding is not
-   acted on. **Contains no opaque identifier at all** (see the token policy). A reader who skimmed the
-   document once must be able to judge it without looking anything up. This is the load-bearing line.
+2. **Consequence if unchanged** — one short sentence per distinct consequence: what goes wrong, for
+   whom, if the finding is not acted on. Use multiple sentences only when required to preserve
+   independent consequences. **Contains no opaque identifier at all** (see the token policy). A reader
+   who skimmed the document once must be able to judge it without looking anything up. This is the
+   load-bearing field.
 3. **Change** — one sentence of intent: what the fix achieves and where it lives. Prefer intent
    language over quoted text or raw markup.
 4. **Basis** — at most **two** sentences of mechanism explaining how the problem arises. Every opaque

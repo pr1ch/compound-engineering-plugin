@@ -31,7 +31,7 @@ afterAll(() => {
 const REAL_TOOLS = [
   "bash", "sh", "jq", "python3", "date", "sed", "tr", "cat", "wc", "awk",
   "dirname", "basename", "mktemp", "env", "perl", "timeout", "gtimeout", "sleep", "rm",
-  "mv", "chmod", "cp", "printf", "kill", "mkdir",
+  "mv", "chmod", "cp", "printf", "kill", "mkdir", "grep", "tail", "ps",
 ]
 // A version-manager shim (pyenv/rbenv/perlbrew/mise) for an interpreter is a
 // wrapper *script*, not a symlink: `command -v python3` returns the shim, but
@@ -187,6 +187,13 @@ describe("cross-model-doc-review route safety (R17)", () => {
     expect(source).toContain("trap 'cleanup_temp' EXIT")
     expect(source).toContain('rm -f "$RAW_OUT"')
     expect(source).toContain('rm -rf "$PEER_WORKDIR"')
+    // Zombies report as Z+ on macOS; exact "Z" alone leaves them "alive".
+    expect(source).toContain('[ "${st#Z}" = "$st" ]')
+    // Match peer-job-runner: empty ps state => not alive; kill -0 only if ps missing.
+    expect(source).toContain("command -v ps")
+    expect(source).toContain("[ -n \"$st\" ] || return 1")
+    // After reap no longer waits, TERM/INT must wait the peer leader.
+    expect(source).toMatch(/reap "\$_term_peer"[\s\S]*?wait "\$_term_peer"/)
   })
 
   test("every route carries read-only / no-prompt / least-privilege flags and no NEVER-use flag", () => {
@@ -266,6 +273,8 @@ printf '%s' '{"structured_output":{"reviewer":"adversarial","findings":[],"resid
     expect(cmd).not.toContain("--bare")
     expect(cmd).toContain("--effort max")
     expect(cmd).toContain("--model fable")
+    expect(cmd).toContain("--output-format stream-json")
+    expect(cmd).toContain("--verbose")
   })
 
   test("grok CLI: deny Read + web/subagents off + dontAsk + effort high", () => {
@@ -276,6 +285,9 @@ printf '%s' '{"structured_output":{"reviewer":"adversarial","findings":[],"resid
     expect(cmd).toContain("--permission-mode dontAsk")
     expect(cmd).toContain("--effort high")
     expect(cmd).toContain("--model grok-4.5")
+    expect(cmd).toContain("--json-schema")
+    expect(cmd).toContain("--output-format json")
+    expect(cmd).not.toContain("stream-json")
   })
 
   test("cursor-agent routes: ask mode + sandbox enabled + scratch workspace", () => {
@@ -285,6 +297,7 @@ printf '%s' '{"structured_output":{"reviewer":"adversarial","findings":[],"resid
       expect(cmd).toContain("--trust")
       expect(cmd).toContain("--sandbox enabled")
       expect(cmd).toContain("--workspace")
+      expect(cmd).toContain("--output-format stream-json")
     }
     expect(emitAdapter("grok-cursor")).toContain("cursor-grok-4.5-high")
     expect(emitAdapter("cursor")).not.toContain("--model")
@@ -581,10 +594,10 @@ describe("cross-model-doc-review normalization (R18, KTD5)", () => {
   test("multi-key receipt: prefers the requested-family key over the alphabetically-first auxiliary key (R7)", () => {
     // A real envelope can carry an auxiliary model's usage (here haiku) beside
     // the serving model. jq `keys` sorts, so a naive keys[0] (or any sorted
-    // pick) would choose fable; the prefix match must select the fable key and
+    // pick) would choose the auxiliary key; the prefix match must select Fable and
     // raise no mismatch warning.
     const multiKeyStub =
-      `#!/bin/sh\ncat >/dev/null\nprintf '%s' '{"structured_output":{"reviewer":"adversarial","findings":[{"section":"X","title":"t"}]},"modelUsage":{"claude-fable-5":{"inputTokens":10},"claude-haiku-4-5-20251001":{"inputTokens":2}}}'\n`
+      `#!/bin/sh\ncat >/dev/null\nprintf '%s' '{"structured_output":{"reviewer":"adversarial","findings":[{"section":"X","title":"t"}]},"modelUsage":{"claude-auxiliary-1":{"inputTokens":2},"claude-fable-5":{"inputTokens":10}}}'\n`
     const { env } = sandbox(["claude"], multiKeyStub)
     const doc = makeDoc()
     const runDir = makeRunDir()

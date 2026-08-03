@@ -65,6 +65,7 @@ GIT_LOCAL_ENV_VARS = frozenset({
     "GIT_GRAFT_FILE",
     "GIT_IMPLICIT_WORK_TREE",
     "GIT_INDEX_FILE",
+    "GIT_INTERNAL_SUPER_PREFIX",
     "GIT_NO_REPLACE_OBJECTS",
     "GIT_OBJECT_DIRECTORY",
     "GIT_PREFIX",
@@ -724,6 +725,12 @@ def cmd_init(args) -> tuple[str, dict]:
     egress = parse_json_arg(args.egress_json, "egress")
     fixed_route_contract(binding, egress, "REFUSED")
     rd = os.path.join(root, rid)
+    if not os.path.lexists(rd):
+        # A capability refusal must happen before READY closes route selection.
+        # prepare repeats this probe because ignored inventory can change later.
+        from unit_workspace_ignored import require_ignored_snapshot_capability
+
+        require_ignored_snapshot_capability(info["toplevel"])
     try:
         os.mkdir(rd, 0o700)
     except FileExistsError:
