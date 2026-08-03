@@ -86,6 +86,7 @@ export interface CodexDevStatus {
 const OFFICIAL_PLUGIN_ID = "compound-engineering@compound-engineering-plugin"
 const OFFICIAL_MARKETPLACE = "compound-engineering-plugin"
 const OFFICIAL_REPOSITORY = "https://github.com/EveryInc/compound-engineering-plugin"
+const LOCAL_PLUGIN_NAMES = new Set(["compound-engineering", "compound-engineering-sol-fable"])
 
 function trim(result: CommandResult): string {
   return result.stdout.trim()
@@ -125,7 +126,7 @@ async function assertCompoundEngineeringRepo(repoRoot: string): Promise<void> {
     throw new Error(`${repoRoot} is not the compound-engineering repository`)
   }
   const pluginJson = await readJson(path.join(repoRoot, ".codex-plugin", "plugin.json"))
-  if (pluginJson.name !== "compound-engineering") {
+  if (typeof pluginJson.name !== "string" || !LOCAL_PLUGIN_NAMES.has(pluginJson.name)) {
     throw new Error(`${repoRoot} is not the compound-engineering repository`)
   }
 
@@ -453,7 +454,10 @@ async function listCompoundEngineeringPlugins(
   const result = await runCodex(context, runner, ["plugin", "list", "--available", "--json"])
   const payload = parseJson<{ installed?: InstalledPlugin[] }>(result, "codex plugin list")
   return (payload.installed ?? []).filter(
-    (entry) => entry.name === "compound-engineering" || entry.pluginId.startsWith("compound-engineering@"),
+    (entry) =>
+      LOCAL_PLUGIN_NAMES.has(entry.name) ||
+      entry.pluginId.startsWith("compound-engineering@") ||
+      entry.pluginId.startsWith("compound-engineering-sol-fable@"),
   )
 }
 
