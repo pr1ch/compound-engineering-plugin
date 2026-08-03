@@ -492,7 +492,7 @@ describe("writeOpenCodeBundle", () => {
     expect(await exists(path.join(outputRoot, "agents", "bug-reproduction-validator.md"))).toBe(false)
     expect(await exists(path.join(outputRoot, "commands", "reproduce-bug.md"))).toBe(false)
     expect(await exists(path.join(outputRoot, "commands", "report-bug.md"))).toBe(false)
-    expect(await exists(path.join(outputRoot, "compound-engineering", "legacy-backup"))).toBe(true)
+    expect(await exists(path.join(outputRoot, bundle.pluginName, "legacy-backup"))).toBe(true)
   })
 
   test("preserves user-authored legacy-name OpenCode agents during install cleanup", async () => {

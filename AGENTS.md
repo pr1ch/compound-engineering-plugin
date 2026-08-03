@@ -91,6 +91,10 @@ When changing plugin content:
 - When adding a user-facing skill, document it: create a `docs/skills/<skill-name>.md` page (purpose, novel mechanics, when to use, chain position — follow the shape of the existing pages) and add a catalog row under the right category in `docs/skills/README.md`, alongside the root `README.md` inventory row and the skill-count bump in `tests/release-metadata.test.ts`. Keep these in sync when a skill's purpose or inventory changes. This is convention, not yet validated by a test, so it is easy to miss — most skills have a page; the few that don't (e.g. `lfg`, `ce-dogfood-beta`) are the exception, not the rule.
 - When adding, removing, renaming, or changing the meaning/default/consumer of a `.compound-engineering/config.local.yaml` option, update `skills/ce-setup/references/config-template.yaml`, its byte-identical `.compound-engineering/config.local.example.yaml` copy, the centralized `docs/skills/configuration.md` reference, and the affected consumer skill docs in the same change. Keep local config as optional checkout-local defaults; durable team instructions belong in the project's normal agent-instructions mechanism.
 - Do not hand-bump release-owned versions in plugin or marketplace manifests.
+- Local fork exception: `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`
+  carry allowlisted Sol/Fable identity suffixes derived from the release-owned
+  `package.json` base version. Update those suffixes only when advancing this
+  private fork's upstream pin; `release:validate` must still pass.
 - Do not hand-add release entries to `CHANGELOG.md` or treat it as the canonical source for new releases.
 - Run `bun run release:validate` if agents, commands, skills, MCP servers, or release-owned descriptions/counts may have changed.
 - When removing a skill, agent, or command, add its name to both cleanup registries so stale flat-install artifacts are swept on upgrade:

@@ -189,6 +189,198 @@ async function makeFixtureRoot(): Promise<string> {
 }
 
 describe("release metadata", () => {
+  test("accepts the allowlisted Sol/Fable fork profile without weakening portable surfaces", async () => {
+    const root = await makeFixtureRoot()
+    await syncReleaseMetadata({ root, write: true })
+
+    await writeFile(
+      path.join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering-sol-fable",
+          version: "2.42.0-sol-fable.2",
+          description: "Sol/Fable review policy",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      path.join(root, ".codex-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering-sol-fable",
+          version: "2.42.0-sol-fable.2+codex.20260803163000",
+          description: "Sol/Fable review policy",
+          skills: "./skills/",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      path.join(root, ".claude-plugin", "marketplace.json"),
+      JSON.stringify(
+        {
+          metadata: { version: "1.0.0", description: "marketplace" },
+          plugins: [{ name: "compound-engineering-sol-fable", description: "Sol/Fable review policy" }],
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      path.join(root, ".agents", "plugins", "marketplace.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering-sol-fable",
+          plugins: [
+            {
+              name: "compound-engineering-sol-fable",
+              source: { source: "local", path: "./" },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    )
+    const portableDescription = "Brainstorm, plan, debug, review, and compound learnings with AI agents"
+    await writeFile(
+      path.join(root, ".kimi-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering",
+          version: "2.42.0",
+          description: portableDescription,
+          skills: "./skills/",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      path.join(root, ".grok-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering",
+          version: "2.42.0",
+          description: portableDescription,
+          skills: "./skills/",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      path.join(root, ".devin-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering",
+          version: "2.42.0",
+          description: portableDescription,
+        },
+        null,
+        2,
+      ),
+    )
+
+    const result = await syncReleaseMetadata({ root, write: false })
+
+    expect(result.errors).toEqual([])
+    expect(result.updates.filter((update) => update.changed)).toEqual([])
+
+    const marketplacePath = path.join(root, ".claude-plugin", "marketplace.json")
+    const expandedMarketplace = JSON.parse(await Bun.file(marketplacePath).text())
+    expandedMarketplace.plugins.push({ name: "unexpected-second-plugin" })
+    await writeFile(marketplacePath, JSON.stringify(expandedMarketplace, null, 2))
+    const expandedResult = await syncReleaseMetadata({ root, write: false })
+    expect(
+      expandedResult.errors.some((error) => error.includes("fork catalog must contain only")),
+    ).toBe(true)
+  })
+
+  test("write mode carries the fork revision across an upstream base-version change", async () => {
+    const root = await makeFixtureRoot()
+    await writeFile(
+      path.join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering-sol-fable",
+          version: "2.41.0-sol-fable.3",
+          description: "Sol/Fable review policy",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      path.join(root, ".codex-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering-sol-fable",
+          version: "2.41.0-sol-fable.3+codex.20260730120000",
+          description: "Sol/Fable review policy",
+          skills: "./skills/",
+        },
+        null,
+        2,
+      ),
+    )
+
+    await syncReleaseMetadata({ root, write: true })
+
+    const claudeManifest = JSON.parse(
+      await Bun.file(path.join(root, ".claude-plugin", "plugin.json")).text(),
+    )
+    const codexManifest = JSON.parse(
+      await Bun.file(path.join(root, ".codex-plugin", "plugin.json")).text(),
+    )
+    expect(claudeManifest.version).toBe("2.42.0-sol-fable.3")
+    expect(codexManifest.version).toMatch(
+      /^2\.42\.0-sol-fable\.3\+codex\.\d{14}$/,
+    )
+
+    const secondPass = await syncReleaseMetadata({ root, write: false })
+    const codexPath = path.join(root, ".codex-plugin", "plugin.json")
+    expect(secondPass.updates.find((update) => update.path === codexPath)?.changed).toBe(false)
+  })
+
+  test("rejects a Codex build version that is not derived from the Sol/Fable Claude version", async () => {
+    const root = await makeFixtureRoot()
+    await syncReleaseMetadata({ root, write: true })
+    await writeFile(
+      path.join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering-sol-fable",
+          version: "2.42.0-sol-fable.1",
+          description: "Sol/Fable review policy",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      path.join(root, ".codex-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: "compound-engineering-sol-fable",
+          version: "2.42.0-sol-fable.1+codex.invalid",
+          description: "Sol/Fable review policy",
+          skills: "./skills/",
+        },
+        null,
+        2,
+      ),
+    )
+
+    const result = await syncReleaseMetadata({ root, write: false })
+    const codexPath = path.join(root, ".codex-plugin", "plugin.json")
+
+    expect(result.updates.find((update) => update.path === codexPath)?.changed).toBe(true)
+  })
+
   test("reports current compound-engineering counts from the repo", async () => {
     const counts = await getCompoundEngineeringCounts(process.cwd())
 

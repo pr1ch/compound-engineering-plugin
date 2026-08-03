@@ -53,3 +53,23 @@ jobs:
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
           skip-labeling: false
+
+      - name: Preserve Sol/Fable-derived versions on the release PR
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          PR_NUMBER=$(jq -r '.number // empty' <<< "$RELEASE_PR")
+          test -n "$PR_NUMBER"
+          gh pr checkout "$PR_NUMBER"
+          bun run release:sync-metadata
+          bun run release:validate
+          git add .claude-plugin/plugin.json .codex-plugin/plugin.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "chore: preserve Sol/Fable release metadata"
+          git push

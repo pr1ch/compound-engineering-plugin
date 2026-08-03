@@ -460,10 +460,10 @@ fi
 # guard: a wedged peer stops growing PEERLOG and dies at IDLE_SECS regardless of
 # HARD_SECS. There, HARD_SECS only backstops a peer that stays *productive* past
 # any useful budget, so it must clear the adopted tier's tail by a wide margin.
-# It did not: the benchmark tail (max ~419s) was measured on small single-file
-# diffs, while a large-diff run (PEER_MAX_TURNS up to 40, multi-file semantic
-# divisions) routinely streams past 600s and was reaped mid-review -- burning the
-# full peer spend for no usable output.
+# The prior Luna/xhigh benchmark reached ~419s, and the first verified live
+# Fable/max tooling review completed in ~677s. A large-diff run
+# (PEER_MAX_TURNS up to 40, multi-file semantic divisions) can run longer still,
+# so a 600s hard cap burns the full peer spend for no usable output.
 #
 # Claude and cursor-agent routes stream (`stream-json`) so run_timeout_cmd can
 # poll PEERLOG the same way (#1270 quiet-interval note). grok-cli keeps

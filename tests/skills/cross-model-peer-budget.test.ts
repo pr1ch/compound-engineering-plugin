@@ -111,9 +111,10 @@ describe("cross-model peer budget", () => {
     }
   })
 
-  test("the adopted Fable/max tier gets a backstop clear of its observed tail", () => {
-    // Benchmarked tail (max ~419s) was measured on small single-file diffs; a
-    // large-diff run streams well past it, so the backstop needs real headroom.
+  test("the Fable/max code-review route keeps headroom beyond its live observed tail", () => {
+    // The prior Luna/xhigh benchmark reached ~419s. The first successful live
+    // Fable/max tooling review on 2026-08-03 ran ~677s, so 600s is demonstrably
+    // too short for this route and the backstop needs real headroom.
     expect(caps(SCRIPTS["ce-code-review"]).hard).toBeGreaterThanOrEqual(1200)
   })
 

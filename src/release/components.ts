@@ -1,4 +1,5 @@
 import { readJson } from "../utils/files"
+import { isSolFableClaudeVersion, isSolFablePlugin } from "./sol-fable-fork"
 import type {
   BumpLevel,
   BumpOverride,
@@ -66,6 +67,7 @@ type RootPackageJson = {
 }
 
 type PluginManifest = {
+  name?: string
   version: string
 }
 
@@ -193,7 +195,12 @@ export async function loadCurrentVersions(cwd = process.cwd()): Promise<VersionS
   const marketplace = await readJson<MarketplaceManifest>(`${cwd}/.claude-plugin/marketplace.json`)
   const cursorMarketplace = await readJson<MarketplaceManifest>(`${cwd}/.cursor-plugin/marketplace.json`)
 
-  if (root.version !== ce.version) {
+  const solFableFork = isSolFablePlugin(ce.name)
+  if (solFableFork && !isSolFableClaudeVersion(root.version, ce.version)) {
+    throw new Error(`Sol/Fable plugin version ${ce.version} is not derived from package.json version ${root.version}`)
+  }
+
+  if (!solFableFork && root.version !== ce.version) {
     throw new Error(`package.json version ${root.version} does not match .claude-plugin/plugin.json version ${ce.version}`)
   }
 
@@ -214,7 +221,9 @@ export async function loadCurrentVersions(cwd = process.cwd()): Promise<VersionS
   }
 
   return {
-    "compound-engineering": ce.version,
+    // Fork suffixes identify local packaging revisions, but upstream release
+    // intent and semver bump calculations remain anchored to package.json.
+    "compound-engineering": root.version,
     marketplace: marketplace.metadata.version,
     "cursor-marketplace": cursorMarketplace.metadata.version,
   }
