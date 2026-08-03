@@ -106,9 +106,25 @@ export default defineCommand({
   async run({ args }) {
     const pluginPath = await resolveCleanupPluginPath(args.plugin ? String(args.plugin) : "compound-engineering")
     const plugin = await loadClaudePlugin(pluginPath)
-    if (plugin.manifest.name !== "compound-engineering") {
+    if (
+      plugin.manifest.name !== "compound-engineering" &&
+      plugin.manifest.name !== "compound-engineering-sol-fable"
+    ) {
       throw new Error("Cleanup currently supports only the compound-engineering plugin.")
     }
+    // The fork has its own live namespace but also descends from upstream's
+    // historical installs. Scan both identities: the legacy-artifact alias
+    // supplies the shared flat allow-list, while each pass retains its own
+    // namespaced install manifest and managed roots.
+    const cleanupPlugins = plugin.manifest.name === "compound-engineering-sol-fable"
+      ? [
+          { plugin, allowManifestMigration: true },
+          {
+            plugin: { ...plugin, manifest: { ...plugin.manifest, name: "compound-engineering" } },
+            allowManifestMigration: false,
+          },
+        ]
+      : [{ plugin, allowManifestMigration: true }]
     const targetNames = resolveCleanupTargets(String(args.target))
     const outputRoot = resolveWorkspaceRoot(args.output)
     const hasExplicitOpenCodeHome = hasExplicitValue(args.opencodeHome)
@@ -131,11 +147,21 @@ export default defineCommand({
 
     const results: CleanupResult[] = []
     for (const target of targetNames) {
-      results.push(...await cleanupTarget(target, plugin, roots))
+      for (const cleanup of cleanupPlugins) {
+        results.push(...await cleanupTarget(target, cleanup.plugin, roots, cleanup.allowManifestMigration))
+      }
     }
 
-    const total = results.reduce((sum, result) => sum + result.moved, 0)
+    const mergedResults = new Map<string, CleanupResult>()
     for (const result of results) {
+      const key = `${result.target}\0${result.root}`
+      const current = mergedResults.get(key)
+      mergedResults.set(key, current
+        ? { ...current, moved: current.moved + result.moved }
+        : result)
+    }
+    const total = [...mergedResults.values()].reduce((sum, result) => sum + result.moved, 0)
+    for (const result of mergedResults.values()) {
       console.log(`Cleaned ${result.target} at ${result.root}: backed up ${result.moved} artifact(s)`)
     }
     console.log(`Cleanup complete for ${plugin.manifest.name}: backed up ${total} artifact(s).`)
@@ -159,11 +185,12 @@ async function cleanupTarget(
     hasExplicitOutput: boolean
     hasExplicitOpenCodeHome: boolean
   },
+  allowManifestMigration: boolean,
 ): Promise<CleanupResult[]> {
   switch (target) {
     case "codex":
       return [
-        await cleanupCodex(plugin, roots.codexHome),
+        await cleanupCodex(plugin, roots.codexHome, allowManifestMigration),
         await cleanupCodexSharedAgents(plugin, roots.agentsHome, roots.codexHome),
       ]
     case "opencode": {
@@ -213,7 +240,11 @@ async function cleanupTarget(
   }
 }
 
-async function cleanupCodex(plugin: Awaited<ReturnType<typeof loadClaudePlugin>>, codexRoot: string): Promise<CleanupResult> {
+async function cleanupCodex(
+  plugin: Awaited<ReturnType<typeof loadClaudePlugin>>,
+  codexRoot: string,
+  allowManifestMigration: boolean,
+): Promise<CleanupResult> {
   const bundle = convertClaudeToCodex(plugin, {
     agentMode: "subagent",
     inferTemperature: true,
@@ -280,7 +311,9 @@ async function cleanupCodex(plugin: Awaited<ReturnType<typeof loadClaudePlugin>>
   // TOML custom agents under `agents/<plugin>/<name>.toml`). The historical
   // allow-list only covers renamed/removed names — it does not cover
   // current-named artifacts that moved locations.
-  const installedManifest = await readCodexInstallManifest(codexRoot, plugin.manifest.name)
+  const installedManifest = allowManifestMigration
+    ? await readCodexInstallManifest(codexRoot, plugin.manifest.name)
+    : null
   if (installedManifest) {
     for (const skillName of installedManifest.skills) {
       if (currentNamespacedSkills.has(skillName)) continue
@@ -335,7 +368,7 @@ async function cleanupCodexSharedAgents(
     codexIncludeSkills: true,
   })
   const artifacts = getLegacyCodexArtifacts(bundle)
-  const managedDir = path.join(agentsRoot, "compound-engineering")
+  const managedDir = path.join(agentsRoot, plugin.manifest.name)
   const agentsSkillsDir = path.join(agentsRoot, "skills")
   const managedRoots = await resolveCodexManagedRoots(codexRoot, plugin.manifest.name)
   let moved = 0
@@ -668,6 +701,10 @@ async function resolveCleanupPluginPath(input: string): Promise<string> {
       const raw = await fs.readFile(rootManifestPath, "utf8")
       const manifest = JSON.parse(raw) as { name?: string }
       if (manifest.name === input) return repoRoot
+      if (input === "compound-engineering" && manifest.name === "compound-engineering-sol-fable") {
+        console.error(`Resolved "${input}" to configured fork "${manifest.name}".`)
+        return repoRoot
+      }
     } catch {
       // Fall through to legacy multi-plugin layout.
     }

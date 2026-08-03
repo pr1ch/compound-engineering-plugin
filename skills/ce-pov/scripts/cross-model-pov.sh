@@ -78,10 +78,10 @@ log()  { printf '[cross-model-pov] %s\n' "$*" >&2; }
 skip() { log "$*"; exit 0; }   # non-blocking: announce reason, exit clean, no output
 
 # --- model + reasoning per provider ----------------------------------------
-# ONE model at HIGH reasoning per provider. Concrete IDs are the CURRENT instance of the tier principle
-# and the single maintenance point when model families change.
+# ONE mapped model and reasoning tier per provider. Concrete IDs are the CURRENT
+# instance of the tier principle and the single maintenance point when families change.
 M_CODEX="gpt-5.6-sol"          # codex CLI            (-c model_reasoning_effort="high")
-M_CLAUDE="opus"                # claude CLI, Opus 4.8 (--effort high)
+M_CLAUDE="fable"               # claude CLI           (--effort max)
 M_GROK="grok-4.5"              # grok CLI             (--effort high)
 M_GROK_CURSOR="cursor-grok-4.5-high" # cursor-agent grok route (reasoning baked into id)
 M_COMPOSER="composer-2.5-fast" # cursor-agent composer (no high tier; -fast is the ceiling)
@@ -96,6 +96,7 @@ M_COMPOSER="composer-2.5-fast" # cursor-agent composer (no high tier; -fast is t
 # ce-code-review and ce-doc-review (kernel parity).
 expected_model_prefix() {   # <requested-alias> -> expected served-id prefix
   case "$1" in
+    fable)  printf 'claude-fable-' ;;
     opus)   printf 'claude-opus-' ;;
     sonnet) printf 'claude-sonnet-' ;;
     haiku)  printf 'claude-haiku-' ;;
@@ -209,7 +210,7 @@ adapter_argv() {
       # and bounded public web checks. Mutating tools, Bash, MCP, and subagents are
       # absent from the allowlist.
       # stream-json + --verbose for PEERLOG idle (#1270); schema still composes.
-      printf '%s\0' claude -p --model "$(route_model claude)" --effort high --permission-mode dontAsk \
+      printf '%s\0' claude -p --model "$(route_model claude)" --effort max --permission-mode dontAsk \
         --safe-mode --disable-slash-commands --tools Read,Glob,Grep,WebSearch,WebFetch \
         --max-turns 15 --no-session-persistence --json-schema "$SCHEMA_REF" \
         --output-format stream-json --verbose
@@ -248,7 +249,7 @@ apply_model_override() {
   [ "$target" != "cursor" ] || return 1
   case "$route:$override" in
     codex:gpt-*|codex:o[0-9]* ) ;;
-    claude:opus|claude:sonnet|claude:haiku|claude:claude-* ) ;;
+    claude:fable|claude:opus|claude:sonnet|claude:haiku|claude:claude-* ) ;;
     grok-cli:grok-* ) ;;
     grok-cursor:cursor-grok-* ) ;;
     composer:composer-* ) ;;
@@ -431,8 +432,8 @@ trap 'cleanup_private_scratch' EXIT
 # cursor-agent stream (`stream-json`) so run_timeout_cmd polls PEERLOG (#1270).
 # grok-cli keeps --json-schema (buffered) and stays hard-only on
 # UNGUARDED_HARD_SECS. This skill's default HARD_SECS stays at 600s because its
-# codex route runs the lower sol/high tier -- ce-code-review and ce-doc-review
-# run luna/xhigh and default higher. `CROSS_MODEL_HARD_SECS` is shared across
+# POV uses a smaller payload and default budget than code-review/doc-review.
+# `CROSS_MODEL_HARD_SECS` is shared across
 # all three, and the orchestrator's aggregate deadline derives from it (see
 # references/cross-model-panel.md), so a raised knob raises both windows.
 IDLE_SECS="${CROSS_MODEL_IDLE_SECS:-180}"
@@ -701,7 +702,7 @@ attempt_route() {   # <provider> <route>
   build_cmd "$route"
   case "$route" in
     codex)       note="$(route_model codex) (effort high)" ;;
-    claude)      note="$(route_model claude) (effort high)" ;;
+    claude)      note="$(route_model claude) (effort max)" ;;
     grok-cli)    note="$(route_model grok-cli) (effort high)" ;;
     grok-cursor) note="$(route_model grok-cursor)" ;;
     cursor)      note="auto (serving model unverified)" ;;

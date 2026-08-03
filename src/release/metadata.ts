@@ -3,8 +3,17 @@ import type { Dirent } from "fs"
 import path from "path"
 import { readJson, writeJson } from "../utils/files"
 import type { ReleaseComponent } from "./types"
+import {
+  isSolFableClaudeVersion,
+  isSolFableCodexVersion,
+  isSolFablePlugin,
+  normalizeSolFableClaudeVersion,
+  solFableCodexVersion,
+  SOL_FABLE_PLUGIN_NAME,
+} from "./sol-fable-fork"
 
 type ClaudePluginManifest = {
+  name?: string
   version: string
   description?: string
   mcpServers?: Record<string, unknown>
@@ -258,9 +267,22 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
   const compoundCursor = await readJson<CursorPluginManifest>(compoundCursorPath)
   const marketplaceClaude = await readJson<MarketplaceManifest>(marketplaceClaudePath)
   const marketplaceCursor = await readJson<MarketplaceManifest>(marketplaceCursorPath)
+  const solFableFork = isSolFablePlugin(compoundClaude.name)
+  const claudeMarketplaceNames = [...marketplaceClaude.plugins.map((plugin) => plugin.name)].sort()
+  if (
+    solFableFork &&
+    (claudeMarketplaceNames.length !== 1 || claudeMarketplaceNames[0] !== SOL_FABLE_PLUGIN_NAME)
+  ) {
+    errors.push(
+      `${marketplaceClaudePath}: Sol/Fable fork catalog must contain only "${SOL_FABLE_PLUGIN_NAME}"`,
+    )
+  }
+  const portablePluginDescription = solFableFork
+    ? compoundDescription
+    : compoundClaude.description
   const expectedCompoundVersion = resolveExpectedVersion(
     versions["compound-engineering"],
-    compoundClaude.version,
+    solFableFork ? compoundPackage.version : compoundClaude.version,
   )
 
   updates.push({
@@ -269,11 +291,18 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
   })
 
   let changed = false
-  if (compoundClaude.version !== expectedCompoundVersion) {
+  if (!solFableFork && compoundClaude.version !== expectedCompoundVersion) {
     compoundClaude.version = expectedCompoundVersion
     changed = true
   }
-  if (compoundClaude.description !== compoundDescription) {
+  if (solFableFork && !isSolFableClaudeVersion(expectedCompoundVersion, compoundClaude.version)) {
+    compoundClaude.version = normalizeSolFableClaudeVersion(
+      expectedCompoundVersion,
+      compoundClaude.version,
+    )
+    changed = true
+  }
+  if (!solFableFork && compoundClaude.description !== compoundDescription) {
     compoundClaude.description = compoundDescription
     changed = true
   }
@@ -351,9 +380,9 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
   // Codex manifests. Unlike Claude/Cursor, the Codex plugin.json is a
   // different schema at `.codex-plugin/plugin.json` and the marketplace lives
   // at `.agents/plugins/marketplace.json` (no metadata.version field). Plugin
-  // version sync is DETECT-ONLY here — release-please owns the bump via
-  // `extra-files` in `.github/release-please-config.json`. Duplicating the
-  // write would create a second authority for the same field.
+  // Canonical Codex version sync is detect-only because release-please owns
+  // that field. In the Sol/Fable fork, release metadata sync is the sole owner
+  // of the derived `Claude version + Codex build stamp` value.
   const compoundCodexPath = path.join(root, ".codex-plugin", "plugin.json")
   const marketplaceCodexPath = path.join(root, ".agents", "plugins", "marketplace.json")
   const marketplaceKimiPath = path.join(root, ".kimi-plugin", "marketplace.json")
@@ -369,6 +398,7 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
       claude: compoundClaude,
       codexPath: compoundCodexPath,
       expectedName: "compound-engineering",
+      ...(solFableFork ? { expectedName: SOL_FABLE_PLUGIN_NAME } : {}),
     },
   ]
 
@@ -391,8 +421,10 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
 
     let codexChanged = false
 
-    // Version: detect-only (release-please owns the write via extra-files).
-    if (codex.version !== claude.version) {
+    if (solFableFork && !isSolFableCodexVersion(claude.version, codex.version)) {
+      codex.version = solFableCodexVersion(claude.version)
+      codexChanged = true
+    } else if (!solFableFork && codex.version !== claude.version) {
       codexChanged = true
     }
 
@@ -417,7 +449,7 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
   // (no release-please entry). Plugin list must mirror Claude exactly.
   try {
     const marketplaceCodex = await readJson<CodexMarketplaceManifest>(marketplaceCodexPath)
-    const claudeNames = [...marketplaceClaude.plugins.map((p) => p.name)].sort()
+    const claudeNames = claudeMarketplaceNames
     const codexNames = [...marketplaceCodex.plugins.map((p) => p.name)].sort()
     if (claudeNames.join("|") !== codexNames.join("|")) {
       errors.push(
@@ -458,7 +490,7 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
       kimiManifestMissing = true
       errors.push(`${compoundKimiPath} is missing but ${compoundClaudePath} exists. Kimi manifest parity required.`)
       updates.push({ path: compoundKimiPath, changed: false })
-      kimi = { name: "compound-engineering", version: compoundClaude.version }
+      kimi = { name: "compound-engineering", version: expectedCompoundVersion }
     } else {
       throw err
     }
@@ -469,11 +501,11 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
   }
 
   let kimiChanged = false
-  if (kimi.version !== compoundClaude.version) {
+  if (kimi.version !== expectedCompoundVersion) {
     kimiChanged = true
   }
-  if (compoundClaude.description !== undefined && kimi.description !== compoundClaude.description) {
-    kimi.description = compoundClaude.description
+  if (portablePluginDescription !== undefined && kimi.description !== portablePluginDescription) {
+    kimi.description = portablePluginDescription
     kimiChanged = true
   }
   await validateDeclaredSkillsPath(compoundKimiPath, "compound-engineering", "Kimi", kimi.skills, errors)
@@ -485,7 +517,9 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
     if (marketplaceKimi.version !== "2") {
       errors.push(`${marketplaceKimiPath}: version "${marketplaceKimi.version}" does not match expected Kimi marketplace schema version "2"`)
     }
-    const claudeNames = [...marketplaceClaude.plugins.map((p) => p.name)].sort()
+    const claudeNames = solFableFork
+      ? ["compound-engineering"]
+      : [...marketplaceClaude.plugins.map((p) => p.name)].sort()
     const kimiIds = [...marketplaceKimi.plugins.map((p) => p.id)].sort()
     if (claudeNames.join("|") !== kimiIds.join("|")) {
       errors.push(
@@ -531,7 +565,7 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
       grokManifestMissing = true
       errors.push(`${compoundGrokPath} is missing but ${compoundClaudePath} exists. Grok manifest parity required.`)
       updates.push({ path: compoundGrokPath, changed: false })
-      grok = { name: "compound-engineering", version: compoundClaude.version }
+      grok = { name: "compound-engineering", version: expectedCompoundVersion }
     } else {
       throw err
     }
@@ -542,11 +576,11 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
   }
 
   let grokChanged = false
-  if (grok.version !== compoundClaude.version) {
+  if (grok.version !== expectedCompoundVersion) {
     grokChanged = true
   }
-  if (compoundClaude.description !== undefined && grok.description !== compoundClaude.description) {
-    grok.description = compoundClaude.description
+  if (portablePluginDescription !== undefined && grok.description !== portablePluginDescription) {
+    grok.description = portablePluginDescription
     grokChanged = true
   }
   await validateDeclaredSkillsPath(compoundGrokPath, "compound-engineering", "Grok", grok.skills, errors)
@@ -559,7 +593,9 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
   // URL source is required; the catalog has no release-owned version field.
   try {
     const marketplaceGrok = await readJson<GrokMarketplaceManifest>(marketplaceGrokPath)
-    const claudeNames = [...marketplaceClaude.plugins.map((p) => p.name)].sort()
+    const claudeNames = solFableFork
+      ? ["compound-engineering"]
+      : [...marketplaceClaude.plugins.map((p) => p.name)].sort()
     const grokNames = [...marketplaceGrok.plugins.map((p) => p.name)].sort()
     if (claudeNames.join("|") !== grokNames.join("|")) {
       errors.push(
@@ -613,11 +649,11 @@ export async function syncReleaseMetadata(options: SyncOptions = {}): Promise<Me
     }
 
     let devinChanged = false
-    if (devin.version !== compoundClaude.version) {
+    if (devin.version !== expectedCompoundVersion) {
       devinChanged = true
     }
-    if (compoundClaude.description !== undefined && devin.description !== compoundClaude.description) {
-      devin.description = compoundClaude.description
+    if (portablePluginDescription !== undefined && devin.description !== portablePluginDescription) {
+      devin.description = portablePluginDescription
       devinChanged = true
     }
     updates.push({ path: compoundDevinPath, changed: devinChanged })

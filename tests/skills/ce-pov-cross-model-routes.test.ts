@@ -97,7 +97,11 @@ describe("ce-pov cross-model route safety", () => {
     }
     expect(emit("codex")).toContain("-s read-only")
     expect(emit("codex")).toContain("-C <read-root>")
+    expect(emit("codex")).toContain("-m gpt-5.6-sol")
+    expect(emit("codex")).toContain('model_reasoning_effort="high"')
     expect(emit("claude")).toContain("--permission-mode dontAsk")
+    expect(emit("claude")).toContain("--model fable")
+    expect(emit("claude")).toContain("--effort max")
     expect(emit("claude")).toContain("--safe-mode")
     expect(emit("claude")).toContain("--disable-slash-commands")
     expect(emit("claude")).not.toContain("--bare")
@@ -171,7 +175,7 @@ describe("ce-pov cross-model route safety", () => {
 })
 
 describe("ce-pov output gate and receipts", () => {
-  const valid = '{"structured_output":{"voice":"peer","position":"Choose A","reasoning":"Lower correction cost","evidence":["https://example.com"],"external_check":"ran","mode":"independent","movement":"initial"},"modelUsage":{"claude-opus-4-8-20260115":{"inputTokens":10}}}'
+  const valid = '{"structured_output":{"voice":"peer","position":"Choose A","reasoning":"Lower correction cost","evidence":["https://example.com"],"external_check":"ran","mode":"independent","movement":"initial"},"modelUsage":{"claude-fable-5":{"inputTokens":10}}}'
 
   test.each([
     ["missing position", '{"structured_output":{"reasoning":"why"}}'],
@@ -219,8 +223,8 @@ describe("ce-pov output gate and receipts", () => {
     expect(out.cross_model_target).toBe("claude")
     expect(out.cross_model_harness).toBe("claude")
     expect(out.serving_family).toBe("claude")
-    expect(out.model_requested).toBe("opus")
-    expect(out.model_actual).toBe("claude-opus-4-8-20260115")
+    expect(out.model_requested).toBe("fable")
+    expect(out.model_actual).toBe("claude-fable-5")
     expect(out.movement).toBe("initial")
     expect(out.independence_verified).toBe(true)
   })

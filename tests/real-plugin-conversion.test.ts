@@ -22,12 +22,16 @@ import { parseFrontmatter } from "../src/utils/frontmatter"
 
 const repoRoot = path.join(import.meta.dir, "..")
 const cliEntry = path.join(repoRoot, "src", "index.ts")
+const rootManifest = JSON.parse(
+  readFileSync(path.join(repoRoot, ".claude-plugin", "plugin.json"), "utf8"),
+) as { name: string }
+const rootPluginName = rootManifest.name
 
 const IMPLEMENTED_TARGETS = ["opencode", "codex", "pi", "antigravity"] as const
 type Target = (typeof IMPLEMENTED_TARGETS)[number]
 
-const PLUGIN_NAMES = ["compound-engineering"] as const
-type PluginName = (typeof PLUGIN_NAMES)[number]
+const PLUGIN_NAMES = [rootPluginName]
+type PluginName = string
 
 // Note on skill body size: an "8KB Codex skill body cap" circulates in
 // ecosystem lint tooling (e.g. wshobson/agents harness_portability.py), but it
@@ -84,7 +88,7 @@ function walkFiles(dir: string): string[] {
 }
 
 function loadSourceInventory(pluginName: PluginName): SourceInventory {
-  const pluginRoot = pluginName === "compound-engineering" ? repoRoot : path.join(repoRoot, "plugins", pluginName)
+  const pluginRoot = pluginName === rootPluginName ? repoRoot : path.join(repoRoot, "plugins", pluginName)
   const agents = listFileBasenames(path.join(pluginRoot, "agents"), ".md")
   const commands = listFileBasenames(path.join(pluginRoot, "commands"), ".md")
   const skills: SourceInventory["skills"] = []
@@ -203,7 +207,7 @@ async function runConvert(pluginName: PluginName, target: Target, tempRoot: stri
     "run",
     cliEntry,
     "convert",
-    pluginName === "compound-engineering" ? repoRoot : path.join(repoRoot, "plugins", pluginName),
+    pluginName === rootPluginName ? repoRoot : path.join(repoRoot, "plugins", pluginName),
     "--to",
     target,
     ...args,

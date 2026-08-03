@@ -6,6 +6,10 @@ import { materializeClaudePluginFixture } from "./helpers/claude-plugin-fixture"
 
 const fixture = materializeClaudePluginFixture(path.join(import.meta.dir, "fixtures", "sample-plugin"))
 const fixtureRoot = fixture.root
+const shippingManifest = JSON.parse(
+  await fs.readFile(path.join(import.meta.dir, "..", ".claude-plugin", "plugin.json"), "utf8"),
+) as { name: string }
+const shippingPluginName = shippingManifest.name
 
 afterAll(fixture.cleanup)
 
@@ -280,6 +284,7 @@ describe("CLI", () => {
     }
 
     expect(stdout).toContain("Cleaned codex")
+    expect(stderr).toContain('Resolved "compound-engineering" to configured fork')
     // 7 historical artifacts get backed up: ce:plan, ce:review-beta, ce-update
     // (pre-namespaced flat path; ce-update is a current skill but its managed
     // install is at ~/.codex/skills/compound-engineering/ce-update, so the
@@ -477,6 +482,14 @@ describe("CLI", () => {
       path.join(codexRoot, "skills", "compound-engineering", "ce-plan", "SKILL.md"),
       "current namespaced skill",
     )
+    const upstreamOnlySkill = path.join(
+      codexRoot,
+      "skills",
+      "compound-engineering",
+      "ce-newer-upstream-skill",
+    )
+    await fs.mkdir(upstreamOnlySkill, { recursive: true })
+    await fs.writeFile(path.join(upstreamOnlySkill, "SKILL.md"), "newer upstream-managed skill")
     // Stale prompt from the prior install.
     await fs.mkdir(path.join(codexRoot, "prompts"), { recursive: true })
     await fs.writeFile(path.join(codexRoot, "prompts", "ce-plan.md"), "stale prompt from prior CE version")
@@ -490,8 +503,42 @@ describe("CLI", () => {
         {
           version: 1,
           pluginName: "compound-engineering",
-          skills: [...staleAgentSkills, "ce-plan"],
+          skills: [...staleAgentSkills, "ce-plan", "ce-newer-upstream-skill"],
           prompts: ["ce-plan.md"],
+          agents: [],
+        },
+        null,
+        2,
+      ),
+    )
+    const forkManagedDir = path.join(codexRoot, "compound-engineering-sol-fable")
+    const forkStaleSkill = path.join(
+      codexRoot,
+      "skills",
+      "compound-engineering-sol-fable",
+      "fork-stale-agent",
+    )
+    await fs.mkdir(forkStaleSkill, { recursive: true })
+    await fs.writeFile(path.join(forkStaleSkill, "SKILL.md"), "stale fork-managed agent")
+    const forkCurrentSkill = path.join(
+      codexRoot,
+      "skills",
+      "compound-engineering-sol-fable",
+      "ce-plan",
+    )
+    await fs.mkdir(forkCurrentSkill, { recursive: true })
+    await fs.writeFile(path.join(forkCurrentSkill, "SKILL.md"), "current fork-managed skill")
+    await fs.mkdir(path.join(agentsRoot, "skills"), { recursive: true })
+    await fs.symlink(forkCurrentSkill, path.join(agentsRoot, "skills", "ce-plan"))
+    await fs.mkdir(forkManagedDir, { recursive: true })
+    await fs.writeFile(
+      path.join(forkManagedDir, "install-manifest.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          pluginName: "compound-engineering-sol-fable",
+          skills: ["fork-stale-agent"],
+          prompts: [],
           agents: [],
         },
         null,
@@ -530,10 +577,20 @@ describe("CLI", () => {
     }
     // Current-named namespaced skill survives (it's in the current bundle).
     expect(await exists(path.join(codexRoot, "skills", "compound-engineering", "ce-plan"))).toBe(true)
-    // Stale prompt migrated (ce-plan is a skill now, not a command/prompt in current CE).
-    expect(await exists(path.join(codexRoot, "prompts", "ce-plan.md"))).toBe(false)
+    // The fork is not authoritative over a newer upstream manifest inventory.
+    expect(await exists(upstreamOnlySkill)).toBe(true)
+    // A manifest-only upstream prompt without a matching ownership fingerprint
+    // survives: the older fork is not authoritative over newer upstream inventory.
+    expect(await exists(path.join(codexRoot, "prompts", "ce-plan.md"))).toBe(true)
     // Backup tree created.
     expect(await exists(path.join(codexRoot, "compound-engineering", "legacy-backup"))).toBe(true)
+    // The live fork namespace is scanned independently from upstream history.
+    expect(await exists(forkStaleSkill)).toBe(false)
+    expect(await exists(path.join(forkManagedDir, "legacy-backup"))).toBe(true)
+    expect(await exists(path.join(agentsRoot, "skills", "ce-plan"))).toBe(false)
+    expect(
+      await exists(path.join(agentsRoot, "compound-engineering-sol-fable", "legacy-backup")),
+    ).toBe(true)
   })
 
   test("cleanup backs up legacy OpenCode artifacts on demand", async () => {
@@ -1139,9 +1196,10 @@ describe("CLI", () => {
       throw new Error(`CLI failed (exit ${exitCode}).\nstdout: ${stdout}\nstderr: ${stderr}`)
     }
 
-    expect(stdout).toContain("Installed compound-engineering")
+    expect(stdout).toContain(`Installed ${shippingPluginName} to`)
+    expect(stderr).toContain('Resolved "compound-engineering" to configured fork')
     expect(stdout).toContain(codexRoot)
-    expect(await exists(path.join(codexRoot, "skills", "compound-engineering", "ce-plan", "SKILL.md"))).toBe(true)
+    expect(await exists(path.join(codexRoot, "skills", shippingPluginName, "ce-plan", "SKILL.md"))).toBe(true)
     expect(await exists(path.join(tempRoot, ".agents", "skills", "ce-plan"))).toBe(false)
     // Native Codex no longer needs a managed Claude-compat tool map in AGENTS.md.
     expect(await exists(path.join(codexRoot, "AGENTS.md"))).toBe(false)
@@ -1181,13 +1239,14 @@ describe("CLI", () => {
       throw new Error(`CLI failed (exit ${exitCode}).\nstdout: ${stdout}\nstderr: ${stderr}`)
     }
 
-    expect(stdout).toContain("Installed compound-engineering")
+    expect(stdout).toContain(`Installed ${shippingPluginName} to`)
+    expect(stderr).toContain('Resolved "compound-engineering" to configured fork')
     // Default omits skills; they're expected from native Codex plugin install.
     expect(await exists(path.join(codexRoot, "skills", "ce-plan", "SKILL.md"))).toBe(false)
-    expect(await exists(path.join(codexRoot, "skills", "compound-engineering", "ce-plan", "SKILL.md"))).toBe(false)
+    expect(await exists(path.join(codexRoot, "skills", shippingPluginName, "ce-plan", "SKILL.md"))).toBe(false)
     // Compound Engineering no longer ships standalone agents, so the default
     // Codex converter followup has no CE payload to emit.
-    expect(await exists(path.join(codexRoot, "agents", "compound-engineering"))).toBe(false)
+    expect(await exists(path.join(codexRoot, "agents", shippingPluginName))).toBe(false)
     // Convert/install no longer creates AGENTS.md; it only strips a legacy tool map if present.
     expect(await exists(path.join(codexRoot, "AGENTS.md"))).toBe(false)
   })

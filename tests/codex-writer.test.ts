@@ -422,7 +422,7 @@ describe("writeCodexBundle", () => {
     expect(await exists(path.join(codexRoot, "skills", "bug-reproduction-validator"))).toBe(false)
     expect(await exists(path.join(codexRoot, "prompts", "reproduce-bug.md"))).toBe(false)
     expect(await exists(path.join(codexRoot, "prompts", "report-bug.md"))).toBe(false)
-    expect(await exists(path.join(codexRoot, "compound-engineering", "legacy-backup"))).toBe(true)
+    expect(await exists(path.join(codexRoot, bundle.pluginName, "legacy-backup"))).toBe(true)
   })
 
   test("sweeps removed CE flat skills while preserving unrelated user skills", async () => {
@@ -465,7 +465,7 @@ describe("writeCodexBundle", () => {
     expect(await exists(path.join(userDebugDir, "SKILL.md"))).toBe(true)
     expect(await exists(path.join(userCleanBranchesDir, "SKILL.md"))).toBe(true)
 
-    const backupRoot = path.join(codexRoot, "compound-engineering", "legacy-backup")
+    const backupRoot = path.join(codexRoot, bundle.pluginName, "legacy-backup")
     expect(await exists(backupRoot)).toBe(true)
     let backedNames: string[] = []
     if (await exists(backupRoot)) {

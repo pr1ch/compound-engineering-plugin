@@ -119,4 +119,24 @@ describe("release-please config validation", () => {
       hidden: false,
     })
   })
+
+  test("fork-derived Claude and Codex versions have one release writer", () => {
+    const configPath = path.join(import.meta.dir, "..", ".github", "release-please-config.json")
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      packages: Record<string, { "extra-files"?: Array<string | { path: string }> }>
+    }
+    const ownedPaths = (config.packages["."]?.["extra-files"] ?? []).map((entry) =>
+      typeof entry === "string" ? entry : entry.path,
+    )
+
+    expect(ownedPaths).not.toContain(".claude-plugin/plugin.json")
+    expect(ownedPaths).not.toContain(".codex-plugin/plugin.json")
+
+    const workflow = readFileSync(
+      path.join(import.meta.dir, "..", ".github", "workflows", "release-pr.yml"),
+      "utf8",
+    )
+    expect(workflow).toContain("bun run release:sync-metadata")
+    expect(workflow).toContain("git add .claude-plugin/plugin.json .codex-plugin/plugin.json")
+  })
 })

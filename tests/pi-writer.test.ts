@@ -415,7 +415,7 @@ Run these research agents:
     // Compound Engineering no longer ships standalone agents; specialist
     // prompts live inside the consuming skill directories.
     expect(await exists(path.join(outputRoot, "agents", "ce-repo-research-analyst.md"))).toBe(false)
-    expect(await exists(path.join(outputRoot, "compound-engineering", "legacy-backup"))).toBe(true)
+    expect(await exists(path.join(outputRoot, bundle.pluginName, "legacy-backup"))).toBe(true)
   })
 })
 

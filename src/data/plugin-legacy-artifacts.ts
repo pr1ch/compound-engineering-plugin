@@ -346,7 +346,10 @@ export type LegacyWindsurfArtifacts = {
 
 export function getLegacyPluginArtifacts(pluginName?: string): LegacyPluginArtifacts {
   if (!pluginName) return {}
-  return EXTRA_LEGACY_ARTIFACTS_BY_PLUGIN[pluginName] ?? {}
+  const historicalName = pluginName === "compound-engineering-sol-fable"
+    ? "compound-engineering"
+    : pluginName
+  return EXTRA_LEGACY_ARTIFACTS_BY_PLUGIN[historicalName] ?? {}
 }
 
 export function getLegacyCodexArtifacts(bundle: CodexBundle): LegacyTargetArtifacts {

@@ -53,7 +53,7 @@ async function runGit(cwd: string, args: string[]): Promise<string> {
   return stdout.trim()
 }
 
-async function createCeRepo(repoRoot: string): Promise<void> {
+async function createCeRepo(repoRoot: string, pluginName = "compound-engineering"): Promise<void> {
   await fs.mkdir(path.join(repoRoot, ".codex-plugin"), { recursive: true })
   await fs.mkdir(path.join(repoRoot, "skills", "ce-alpha"), { recursive: true })
   await fs.writeFile(
@@ -62,7 +62,7 @@ async function createCeRepo(repoRoot: string): Promise<void> {
   )
   await fs.writeFile(
     path.join(repoRoot, ".codex-plugin", "plugin.json"),
-    JSON.stringify({ name: "compound-engineering", version: "3.19.0", skills: "./skills/" }) + "\n",
+    JSON.stringify({ name: pluginName, version: "3.19.0", skills: "./skills/" }) + "\n",
   )
   await fs.writeFile(
     path.join(repoRoot, "skills", "ce-alpha", "SKILL.md"),
@@ -201,6 +201,36 @@ describe("Codex local development context", () => {
     await fs.mkdir(codexHome, { recursive: true })
     await fs.writeFile(path.join(repo, "package.json"), JSON.stringify({ name: "something-else" }))
     await runGit(repo, ["init", "-b", "main"])
+
+    await expect(
+      resolveCodexDevContext(repo, testEnv(home, codexHome), new BunCommandRunner()),
+    ).rejects.toThrow("not the compound-engineering repository")
+  })
+
+  test("accepts the Sol/Fable fork manifest", async () => {
+    const root = await makeTempRoot("codex-dev-sol-fable-repo-")
+    const repo = path.join(root, "repo")
+    const home = path.join(root, "home")
+    const codexHome = path.join(root, "codex-home")
+    await fs.mkdir(repo, { recursive: true })
+    await fs.mkdir(home, { recursive: true })
+    await fs.mkdir(codexHome, { recursive: true })
+    await createCeRepo(repo, "compound-engineering-sol-fable")
+
+    const context = await resolveCodexDevContext(repo, testEnv(home, codexHome), new BunCommandRunner())
+
+    expect(context.repoRoot).toBe(await fs.realpath(repo))
+  })
+
+  test("rejects an unapproved Codex plugin manifest name", async () => {
+    const root = await makeTempRoot("codex-dev-unapproved-manifest-")
+    const repo = path.join(root, "repo")
+    const home = path.join(root, "home")
+    const codexHome = path.join(root, "codex-home")
+    await fs.mkdir(repo, { recursive: true })
+    await fs.mkdir(home, { recursive: true })
+    await fs.mkdir(codexHome, { recursive: true })
+    await createCeRepo(repo, "unapproved-plugin")
 
     await expect(
       resolveCodexDevContext(repo, testEnv(home, codexHome), new BunCommandRunner()),
@@ -447,6 +477,11 @@ describe("Codex development installation transitions", () => {
         marketplaceName: "personal",
         source: { source: "local", path: "/some/old/checkout" },
       }),
+      plugin("compound-engineering-sol-fable@personal", {
+        name: "compound-engineering-sol-fable",
+        marketplaceName: "personal",
+        source: { source: "local", path: "/some/fork/checkout" },
+      }),
     ])
 
     const status = await switchToLocal(context, runner)
@@ -457,6 +492,7 @@ describe("Codex development installation transitions", () => {
     expect(runner.calls.filter((call) => call[1] === "plugin" && call[2] === "remove")).toEqual([
       ["codex", "plugin", "remove", "compound-engineering@compound-engineering-plugin", "--json"],
       ["codex", "plugin", "remove", "compound-engineering@personal", "--json"],
+      ["codex", "plugin", "remove", "compound-engineering-sol-fable@personal", "--json"],
     ])
   })
 

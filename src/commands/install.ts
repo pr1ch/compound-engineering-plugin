@@ -309,6 +309,10 @@ async function resolvePluginRoot(repoRoot: string, pluginName: string): Promise<
       const raw = await fs.readFile(rootManifest, "utf8")
       const manifest = JSON.parse(raw) as { name?: string }
       if (manifest.name === pluginName) return repoRoot
+      if (pluginName === "compound-engineering" && manifest.name === "compound-engineering-sol-fable") {
+        console.error(`Resolved "${pluginName}" to configured fork "${manifest.name}".`)
+        return repoRoot
+      }
     } catch {
       // Fall through to the legacy multi-plugin layout.
     }

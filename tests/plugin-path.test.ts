@@ -52,6 +52,51 @@ async function createTestRepo(): Promise<string> {
 }
 
 describe("plugin-path", () => {
+  test("resolves the canonical name to a fork-root manifest with a diagnostic", async () => {
+    const repoRoot = await createTestRepo()
+    const manifestPath = path.join(repoRoot, ".claude-plugin", "plugin.json")
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"))
+    manifest.name = "compound-engineering-sol-fable"
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    await runGit(["add", manifestPath], repoRoot, gitEnv)
+    await runGit(["commit", "-m", "configure fork identity"], repoRoot, gitEnv)
+
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "plugin-path-fork-alias-"))
+    const proc = Bun.spawn([
+      "bun",
+      "run",
+      path.join(projectRoot, "src", "index.ts"),
+      "plugin-path",
+      "compound-engineering",
+      "--branch",
+      "main",
+    ], {
+      cwd: projectRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...gitEnv,
+        HOME: tempHome,
+        COMPOUND_PLUGIN_GITHUB_SOURCE: repoRoot,
+      },
+    })
+
+    const exitCode = await proc.exited
+    const stdout = await new Response(proc.stdout).text()
+    const stderr = await new Response(proc.stderr).text()
+    expect(exitCode).toBe(0)
+    expect(stderr).toContain('Resolved "compound-engineering" to configured fork')
+    expect(stdout.trim()).toBe(
+      path.join(
+        tempHome,
+        ".cache",
+        "compound-engineering",
+        "branches",
+        "compound-engineering-main",
+      ),
+    )
+  })
+
   test("clones a branch to a stable cache path", async () => {
     const repoRoot = await createTestRepo()
     await runGit(["checkout", "-b", "feat/test-branch"], repoRoot, gitEnv)
