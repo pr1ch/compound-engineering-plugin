@@ -221,6 +221,21 @@ describe("Codex local development context", () => {
 
     expect(context.repoRoot).toBe(await fs.realpath(repo))
   })
+
+  test("rejects an unapproved Codex plugin manifest name", async () => {
+    const root = await makeTempRoot("codex-dev-unapproved-manifest-")
+    const repo = path.join(root, "repo")
+    const home = path.join(root, "home")
+    const codexHome = path.join(root, "codex-home")
+    await fs.mkdir(repo, { recursive: true })
+    await fs.mkdir(home, { recursive: true })
+    await fs.mkdir(codexHome, { recursive: true })
+    await createCeRepo(repo, "unapproved-plugin")
+
+    await expect(
+      resolveCodexDevContext(repo, testEnv(home, codexHome), new BunCommandRunner()),
+    ).rejects.toThrow("not the compound-engineering repository")
+  })
 })
 
 describe("Codex local skill collection", () => {
